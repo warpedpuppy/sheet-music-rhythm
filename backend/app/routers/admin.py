@@ -102,6 +102,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)) -> AdminUserDetail:
                 accuracy=a.accuracy,
                 passed=a.passed,
                 gave_up=a.gave_up,
+                mode=a.mode,
                 created_at=a.created_at,
             )
             for a, title in attempts

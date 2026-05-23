@@ -34,6 +34,7 @@ const PASSED_RESULT: AttemptResult = {
   attempt_id: 10,
   passed: true,
   gave_up: false,
+  mode: 'free',
   accuracy: 1,
   note_results: [0, 1, 2, 3].map((index) => ({
     index,
@@ -97,6 +98,54 @@ describe('ExercisePlayer', () => {
     expect(screen.getByText(/Accuracy: 100%/)).toBeInTheDocument()
   })
 
+  it('strict mode counts in for one measure, then submits taps relative to the downbeat', async () => {
+    // 240 BPM -> 250 ms per beat -> a 4-beat count-in lasts one second.
+    const fastExercise = { ...EXERCISE, tempo_bpm: 240 }
+    vi.spyOn(api, 'getExercise').mockResolvedValue(fastExercise)
+    const submitSpy = vi
+      .spyOn(api, 'submitAttempt')
+      .mockResolvedValue({ ...PASSED_RESULT, mode: 'strict', inferred_bpm: 240 })
+    renderPlayer()
+    await screen.findByText('Four steady quarters')
+
+    await userEvent.click(screen.getByLabelText(/With the metronome/))
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    expect(screen.getByText(/Count-in/)).toBeInTheDocument()
+    expect(api.submitAttempt).not.toHaveBeenCalled()
+
+    await waitFor(() => expect(screen.getByText(/0 \/ 4 taps/)).toBeInTheDocument(), {
+      timeout: 4000,
+    })
+    expect(screen.getByText(/Stay locked to the metronome/)).toBeInTheDocument()
+
+    await tapSpace(4)
+    await waitFor(() => expect(submitSpy).toHaveBeenCalledTimes(1))
+    const [, taps, gaveUp, submittedMode] = submitSpy.mock.calls[0]
+    expect(submittedMode).toBe('strict')
+    expect(gaveUp).toBe(false)
+    expect(taps).toHaveLength(4)
+    // Taps are normalized to the downbeat epoch: tapping right after capture opens
+    // lands near beat zero, not near performance.now().
+    expect(Math.abs((taps as number[])[0])).toBeLessThan(2000)
+
+    expect(await screen.findByText(/against the metronome at 240 BPM/)).toBeInTheDocument()
+  })
+
+  it('free mode is the default and does not count in', async () => {
+    vi.spyOn(api, 'getExercise').mockResolvedValue(EXERCISE)
+    const submitSpy = vi.spyOn(api, 'submitAttempt').mockResolvedValue(PASSED_RESULT)
+    renderPlayer()
+    await screen.findByText('Four steady quarters')
+
+    expect(screen.getByLabelText(/Free tempo/)).toBeChecked()
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(screen.queryByText(/Count-in/)).not.toBeInTheDocument()
+    await tapSpace(4)
+    await waitFor(() => expect(submitSpy).toHaveBeenCalledTimes(1))
+    expect(submitSpy.mock.calls[0][3]).toBe('free')
+  })
+
   it('runs the metronome at the exercise tempo while capturing and stops it after', async () => {
     vi.spyOn(api, 'getExercise').mockResolvedValue(EXERCISE)
     vi.spyOn(api, 'submitAttempt').mockResolvedValue(PASSED_RESULT)
@@ -136,7 +185,7 @@ describe('ExercisePlayer', () => {
     await userEvent.click(screen.getByRole('button', { name: /I give up/ }))
     expect(screen.getByText(/Listen — this is the rhythm/)).toBeInTheDocument()
 
-    await waitFor(() => expect(submitSpy).toHaveBeenCalledWith(1, [], true), {
+    await waitFor(() => expect(submitSpy).toHaveBeenCalledWith(1, [], true, 'free'), {
       timeout: 5000,
     })
   })

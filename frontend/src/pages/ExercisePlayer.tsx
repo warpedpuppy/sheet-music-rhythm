@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
-import type { AttemptResult, Exercise } from '../api/types'
+import type { AttemptMode, AttemptResult, Exercise } from '../api/types'
 import { Metronome } from '../components/Metronome'
 import { RhythmStaff } from '../components/RhythmStaff'
 import type { DotMarker } from '../components/RhythmStaff'
@@ -9,7 +9,7 @@ import { useTapCapture } from '../hooks/useTapCapture'
 import { tickEngine } from '../lib/audio'
 import { expectedOnsets, onsetTimesMs, tapsToPattern } from '../lib/rhythm'
 
-type Phase = 'idle' | 'capturing' | 'submitting' | 'playback' | 'result'
+type Phase = 'idle' | 'count-in' | 'capturing' | 'submitting' | 'playback' | 'result'
 
 export function ExercisePlayer() {
   const { id } = useParams<{ id: string }>()
@@ -17,19 +17,32 @@ export function ExercisePlayer() {
   const [exercise, setExercise] = useState<Exercise | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
+  const [mode, setMode] = useState<AttemptMode>('free')
+  const [countInBeat, setCountInBeat] = useState<number | null>(null)
   const [result, setResult] = useState<AttemptResult | null>(null)
   const [lastTaps, setLastTaps] = useState<number[]>([])
   const [playingIndex, setPlayingIndex] = useState<number | null>(null)
   const [showPlayed, setShowPlayed] = useState(false)
+  // performance.now() of the pattern's beat zero (set when the count-in finishes);
+  // strict-mode taps are reported relative to this instant.
+  const downbeatEpochRef = useRef(0)
+  const captureOpenTimerRef = useRef<number | null>(null)
 
   const onsets = useMemo(() => (exercise ? expectedOnsets(exercise.pattern) : []), [exercise])
 
+  const clearCaptureOpenTimer = useCallback(() => {
+    if (captureOpenTimerRef.current !== null) {
+      window.clearTimeout(captureOpenTimerRef.current)
+      captureOpenTimerRef.current = null
+    }
+  }, [])
+
   const submitAttempt = useCallback(
-    async (tapsMs: number[], gaveUp: boolean) => {
+    async (tapsMs: number[], gaveUp: boolean, attemptMode: AttemptMode) => {
       if (!exercise) return
       setPhase('submitting')
       try {
-        const attempt = await api.submitAttempt(exercise.id, tapsMs, gaveUp)
+        const attempt = await api.submitAttempt(exercise.id, tapsMs, gaveUp, attemptMode)
         setResult(attempt)
         setPhase('result')
       } catch (err) {
@@ -46,7 +59,9 @@ export function ExercisePlayer() {
     onComplete: (tapsMs) => {
       tickEngine.stopMetronome()
       setLastTaps(tapsMs)
-      void submitAttempt(tapsMs, false)
+      const reported =
+        mode === 'strict' ? tapsMs.map((tap) => tap - downbeatEpochRef.current) : tapsMs
+      void submitAttempt(reported, false, mode)
     },
   })
   const { reset: resetCapture } = tapCapture
@@ -59,6 +74,7 @@ export function ExercisePlayer() {
     setPhase('idle')
     setShowPlayed(false)
     setPlayingIndex(null)
+    setCountInBeat(null)
     resetCapture()
     api
       .getExercise(Number(id))
@@ -70,26 +86,55 @@ export function ExercisePlayer() {
       })
     return () => {
       cancelled = true
+      clearCaptureOpenTimer()
       tickEngine.cancelAll()
     }
-  }, [id, resetCapture])
+  }, [id, resetCapture, clearCaptureOpenTimer])
 
   function handleStart() {
     if (!exercise) return
     setResult(null)
     setShowPlayed(false)
     setPlayingIndex(null)
-    tickEngine.startMetronome(exercise.tempo_bpm)
-    setPhase('capturing')
-    tapCapture.start()
+    if (mode === 'free') {
+      tickEngine.startMetronome(exercise.tempo_bpm)
+      setPhase('capturing')
+      tapCapture.start()
+      return
+    }
+    // Strict mode: one full measure of count-in, then the downbeat is beat zero of
+    // the pattern. The capture window opens half a beat early so an eager first tap
+    // is still recorded (and scored as early) instead of silently dropped.
+    const countInBeats = exercise.time_sig_top
+    const beatMs = 60000 / exercise.tempo_bpm
+    setPhase('count-in')
+    setCountInBeat(null)
+    tickEngine.startMetronome(exercise.tempo_bpm, (index, wallTimeMs) => {
+      if (index < countInBeats) {
+        setCountInBeat(index + 1)
+      }
+      if (index === countInBeats - 1) {
+        downbeatEpochRef.current = wallTimeMs + beatMs
+        clearCaptureOpenTimer()
+        captureOpenTimerRef.current = window.setTimeout(() => {
+          tapCapture.start()
+        }, beatMs / 2)
+      }
+      if (index === countInBeats) {
+        setCountInBeat(null)
+        setPhase('capturing')
+      }
+    })
   }
 
   function handleGiveUp() {
     if (!exercise) return
+    clearCaptureOpenTimer()
     tickEngine.stopMetronome()
     tapCapture.reset()
     setResult(null)
     setShowPlayed(false)
+    setCountInBeat(null)
     setPhase('playback')
     const offsets = onsetTimesMs(exercise.pattern, exercise.tempo_bpm)
     tickEngine.playSchedule(
@@ -97,16 +142,18 @@ export function ExercisePlayer() {
       (index) => setPlayingIndex(index),
       () => {
         setPlayingIndex(null)
-        void submitAttempt([], true)
+        void submitAttempt([], true, mode)
       },
     )
   }
 
   function handleTryAgain() {
+    clearCaptureOpenTimer()
     tickEngine.cancelAll()
     setResult(null)
     setShowPlayed(false)
     setPlayingIndex(null)
+    setCountInBeat(null)
     tapCapture.reset()
     setPhase('idle')
   }
@@ -183,12 +230,24 @@ export function ExercisePlayer() {
         dots={dots}
       />
 
+      {phase === 'count-in' && (
+        <div className="capturing-hint" role="status">
+          <Metronome bpm={exercise.tempo_bpm} running />
+          <div>
+            Count-in — start tapping on the next downbeat…{' '}
+            <span className="count-in-number">{countInBeat ?? ''}</span>
+          </div>
+        </div>
+      )}
+
       {phase === 'capturing' && (
         <div className="capturing-hint" role="status">
           <Metronome bpm={exercise.tempo_bpm} running />
           <div>
-            Tap the <strong>spacebar</strong> in the rhythm shown above. The metronome is
-            ticking at the written tempo as a guide, but you set the speed.{' '}
+            Tap the <strong>spacebar</strong> in the rhythm shown above.{' '}
+            {mode === 'strict'
+              ? 'Stay locked to the metronome — your taps are judged against its beat.'
+              : 'The metronome is ticking at the written tempo as a guide, but you set the speed.'}{' '}
             <span className="tap-progress">
               {tapCapture.taps.length} / {exercise.tap_count} taps
             </span>
@@ -213,7 +272,11 @@ export function ExercisePlayer() {
             <>
               {' '}
               Accuracy: {Math.round(result.accuracy * 100)}%
-              {result.inferred_bpm ? ` at ≈${Math.round(result.inferred_bpm)} BPM.` : '.'}
+              {result.mode === 'strict'
+                ? ` against the metronome at ${Math.round(result.inferred_bpm ?? exercise.tempo_bpm)} BPM.`
+                : result.inferred_bpm
+                  ? ` at ≈${Math.round(result.inferred_bpm)} BPM (your tempo).`
+                  : '.'}
             </>
           )}
           {!result.gave_up && (
@@ -235,13 +298,39 @@ export function ExercisePlayer() {
         </div>
       )}
 
+      {(phase === 'idle' || phase === 'result') && (
+        <fieldset className="mode-toggle">
+          <legend>Difficulty</legend>
+          <label className={mode === 'free' ? 'selected' : ''}>
+            <input
+              type="radio"
+              name="attempt-mode"
+              value="free"
+              checked={mode === 'free'}
+              onChange={() => setMode('free')}
+            />
+            Free tempo — you set the speed
+          </label>
+          <label className={mode === 'strict' ? 'selected' : ''}>
+            <input
+              type="radio"
+              name="attempt-mode"
+              value="strict"
+              checked={mode === 'strict'}
+              onChange={() => setMode('strict')}
+            />
+            With the metronome — count-in, then stay on its beat
+          </label>
+        </fieldset>
+      )}
+
       <div className="player-controls">
         {(phase === 'idle' || phase === 'result') && (
           <button type="button" className="button-primary" onClick={handleStart}>
             {phase === 'result' ? 'Try again' : 'Start'}
           </button>
         )}
-        {phase === 'capturing' && (
+        {(phase === 'capturing' || phase === 'count-in') && (
           <button type="button" className="button-secondary" onClick={handleTryAgain}>
             Cancel
           </button>

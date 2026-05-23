@@ -133,3 +133,56 @@ def score_taps(expected_beats: list[float], taps_ms: list[float]) -> ScoreResult
         passed=accuracy >= PASS_THRESHOLD,
         inferred_ms_per_beat=ms_per_beat,
     )
+
+
+def _verdict_for_deviation(deviation: float) -> str:
+    if abs(deviation) <= ON_TIME_WINDOW:
+        return "on_time"
+    if abs(deviation) <= CLOSE_WINDOW:
+        return "early" if deviation < 0 else "late"
+    return "wrong"
+
+
+def score_taps_strict(
+    expected_beats: list[float], taps_ms: list[float], ms_per_beat: float
+) -> ScoreResult:
+    """Score taps against a fixed metronome grid.
+
+    ``taps_ms`` must be relative to the downbeat that follows the count-in (beat 0 of
+    the pattern). Unlike free-tempo scoring there is no anchoring and no tempo
+    inference: every note, including the first, is judged by how far it landed from
+    ``expected_beat * ms_per_beat``.
+    """
+    if not expected_beats:
+        return ScoreResult(note_results=[], accuracy=0.0, passed=False, inferred_ms_per_beat=ms_per_beat)
+    if not taps_ms:
+        result = _all_missed(expected_beats)
+        result.inferred_ms_per_beat = ms_per_beat
+        return result
+
+    notes: list[NoteScore] = []
+    for i, expected in enumerate(expected_beats):
+        if i >= len(taps_ms):
+            notes.append(
+                NoteScore(index=i, expected_beat=expected, actual_beat=None, deviation_beats=None, verdict="missed")
+            )
+            continue
+        actual = taps_ms[i] / ms_per_beat
+        deviation = actual - expected
+        notes.append(
+            NoteScore(
+                index=i,
+                expected_beat=expected,
+                actual_beat=round(actual, 4),
+                deviation_beats=round(deviation, 4),
+                verdict=_verdict_for_deviation(deviation),
+            )
+        )
+
+    accuracy = sum(1.0 for n in notes if n.verdict == "on_time") / len(notes)
+    return ScoreResult(
+        note_results=notes,
+        accuracy=round(accuracy, 4),
+        passed=accuracy >= PASS_THRESHOLD,
+        inferred_ms_per_beat=ms_per_beat,
+    )

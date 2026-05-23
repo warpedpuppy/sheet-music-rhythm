@@ -105,9 +105,13 @@ class ExerciseListItem(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+AttemptMode = Literal["free", "strict"]
+
+
 class AttemptCreate(BaseModel):
     taps_ms: list[float] = Field(default_factory=list)
     gave_up: bool = False
+    mode: AttemptMode = "free"
 
 
 class NoteResult(BaseModel):
@@ -122,6 +126,7 @@ class AttemptResult(BaseModel):
     attempt_id: int
     passed: bool
     gave_up: bool
+    mode: AttemptMode
     accuracy: float
     note_results: list[NoteResult]
     inferred_bpm: float | None
@@ -190,6 +195,7 @@ class AdminAttemptOut(BaseModel):
     accuracy: float
     passed: bool
     gave_up: bool
+    mode: AttemptMode
     created_at: datetime
 
 

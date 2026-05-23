@@ -1,6 +1,7 @@
 import type {
   AdminUser,
   AdminUserDetail,
+  AttemptMode,
   AttemptResult,
   Exercise,
   ExerciseListItem,
@@ -80,10 +81,10 @@ export const api = {
 
   listExercises: () => request<ExerciseListItem[]>('/api/exercises'),
   getExercise: (id: number) => request<Exercise>(`/api/exercises/${id}`),
-  submitAttempt: (exerciseId: number, tapsMs: number[], gaveUp: boolean) =>
+  submitAttempt: (exerciseId: number, tapsMs: number[], gaveUp: boolean, mode: AttemptMode = 'free') =>
     request<AttemptResult>(`/api/exercises/${exerciseId}/attempts`, {
       method: 'POST',
-      body: JSON.stringify({ taps_ms: tapsMs, gave_up: gaveUp }),
+      body: JSON.stringify({ taps_ms: tapsMs, gave_up: gaveUp, mode }),
     }),
 
   getProgress: () => request<ProgressSummary>('/api/progress'),

@@ -9,7 +9,7 @@ from ..models import Attempt, Exercise, User
 from ..schemas import AttemptCreate, AttemptResult, NoteResult, Pattern
 from ..services.progression import get_or_create_progress, record_attempt_outcome
 from ..services.rhythm import expected_onsets
-from ..services.scoring import score_taps
+from ..services.scoring import score_taps, score_taps_strict
 
 router = APIRouter(prefix="/api/exercises", tags=["attempts"])
 
@@ -37,7 +37,10 @@ def submit_attempt(
         passed = False
     else:
         taps = sorted(payload.taps_ms)
-        result = score_taps(expected_beats, taps)
+        if payload.mode == "strict":
+            result = score_taps_strict(expected_beats, taps, 60000.0 / exercise.tempo_bpm)
+        else:
+            result = score_taps(expected_beats, taps)
         passed = result.passed
 
     note_results = [
@@ -59,6 +62,7 @@ def submit_attempt(
         accuracy=result.accuracy,
         passed=passed,
         gave_up=payload.gave_up,
+        mode=payload.mode,
     )
     db.add(attempt)
     db.flush()
@@ -77,6 +81,7 @@ def submit_attempt(
         attempt_id=attempt.id,
         passed=passed,
         gave_up=payload.gave_up,
+        mode=payload.mode,
         accuracy=result.accuracy,
         note_results=note_results,
         inferred_bpm=result.inferred_bpm,

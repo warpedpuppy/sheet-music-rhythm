@@ -65,17 +65,21 @@ Open http://localhost:5173, create an account (or log in as `demo`), and start t
 
 1. The rhythm is rendered on a percussion staff. A link under the title points to the
    Learn section that explains the concept being practiced.
-2. Press **Start**, then tap the **spacebar** in the rhythm of the notes shown. A
-   metronome starts ticking at the exercise's written tempo — a softer, lower "tock" at
-   half the volume of the spacebar tick, with a pendulum swinging on screen — as a
-   pacing guide only: scoring is still free-tempo, so you set the speed and the attempt
-   ends as soon as you have tapped as many notes as are on the page. Tap only where
-   notes begin — never during rests or on the second note of a tie.
-3. Your taps are sent to the backend, which anchors your first tap to the first note,
-   infers your tempo from the span of your taps, and checks whether each note landed
-   where the notation says it should. Each note is marked on time / early / late /
-   wrong / missed (colored dots over the notation) and the attempt passes at **80%
-   on-time notes**.
+2. Pick a difficulty, then press **Start** and tap the **spacebar** in the rhythm of
+   the notes shown. In both modes a metronome ticks at the exercise's written tempo —
+   a softer, lower "tock" at half the volume of the spacebar tick, with a pendulum
+   swinging on screen. The attempt ends as soon as you have tapped as many notes as
+   are on the page. Tap only where notes begin — never during rests or on the second
+   note of a tie.
+   - **Free tempo** (default): the metronome is only a pacing guide. The backend
+     anchors your first tap to the first note and infers your tempo from the span of
+     your taps, so only the *proportions* between taps matter.
+   - **With the metronome** (strict): the metronome counts in one full measure
+     (watch the count on screen), then your taps are judged against its absolute beat
+     grid — the right rhythm at the wrong tempo fails, and even the first note can be
+     early or late.
+3. Each note is marked on time / early / late / wrong / missed (colored dots over the
+   notation) and the attempt passes at **80% on-time notes** in either mode.
 4. If you made a mistake, **Show what you actually played** writes your taps out as
    notation below the exercise so you can compare it with what was printed.
 5. Passing **two** exercises at your highest unlocked level unlocks the next level.

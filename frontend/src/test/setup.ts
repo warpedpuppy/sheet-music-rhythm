@@ -48,11 +48,24 @@ class MockGain {
 
 class MockAudioContext {
   state = 'running'
-  currentTime = 0
   destination = {}
   resume = vi.fn().mockResolvedValue(undefined)
   createOscillator = vi.fn(() => new MockOscillator())
   createGain = vi.fn(() => new MockGain())
+
+  // A real AudioContext's clock advances continuously; mimic that by deriving the
+  // time from performance.now() while still letting tests jump the clock by
+  // assigning to currentTime.
+  private origin = performance.now()
+  private offset = 0
+
+  get currentTime(): number {
+    return this.offset + (performance.now() - this.origin) / 1000
+  }
+
+  set currentTime(value: number) {
+    this.offset = value - (performance.now() - this.origin) / 1000
+  }
 }
 
 Object.defineProperty(window, 'AudioContext', {

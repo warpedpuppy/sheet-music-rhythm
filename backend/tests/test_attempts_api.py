@@ -8,10 +8,10 @@ QUARTERS = [
 ]
 
 
-def submit(client, headers, exercise_id, taps_ms, gave_up=False):
+def submit(client, headers, exercise_id, taps_ms, gave_up=False, mode="free"):
     return client.post(
         f"/api/exercises/{exercise_id}/attempts",
-        json={"taps_ms": taps_ms, "gave_up": gave_up},
+        json={"taps_ms": taps_ms, "gave_up": gave_up, "mode": mode},
         headers=headers,
     )
 
@@ -77,6 +77,49 @@ class TestSubmitAttempt:
         listing = client.get("/api/exercises", headers=student_headers).json()
         assert listing[0]["attempt_count"] == 1
         assert listing[0]["passed"] is True
+
+
+class TestStrictMode:
+    def test_on_grid_strict_attempt_passes(self, client, db, student_headers):
+        # tempo_bpm=80 -> 750 ms per beat
+        exercise = make_exercise(db, events=QUARTERS, tempo_bpm=80)
+        response = submit(client, student_headers, exercise.id, [0, 750, 1500, 2250], mode="strict")
+        body = response.json()
+        assert body["mode"] == "strict"
+        assert body["passed"] is True
+        assert body["inferred_bpm"] == 80.0
+
+    def test_off_tempo_strict_attempt_fails_but_free_passes(self, client, db, student_headers):
+        exercise = make_exercise(db, events=QUARTERS, tempo_bpm=80)
+        slow_taps = [0, 1500, 3000, 4500]
+        strict = submit(client, student_headers, exercise.id, slow_taps, mode="strict").json()
+        free = submit(client, student_headers, exercise.id, slow_taps, mode="free").json()
+        assert strict["passed"] is False
+        assert free["passed"] is True
+
+    def test_mode_defaults_to_free_when_omitted(self, client, db, student_headers):
+        exercise = make_exercise(db, events=QUARTERS)
+        response = client.post(
+            f"/api/exercises/{exercise.id}/attempts",
+            json={"taps_ms": [0, 600, 1200, 1800], "gave_up": False},
+            headers=student_headers,
+        )
+        assert response.json()["mode"] == "free"
+
+    def test_invalid_mode_is_rejected(self, client, db, student_headers):
+        exercise = make_exercise(db, events=QUARTERS)
+        response = submit(client, student_headers, exercise.id, [0, 600], mode="metronome")
+        assert response.status_code == 422
+
+    def test_strict_mode_is_visible_in_admin_attempt_history(
+        self, client, db, admin_headers, student_headers
+    ):
+        exercise = make_exercise(db, events=QUARTERS, tempo_bpm=80)
+        submit(client, student_headers, exercise.id, [0, 750, 1500, 2250], mode="strict")
+        users = client.get("/api/admin/users", headers=admin_headers).json()
+        student_id = next(u["id"] for u in users if u["username"] == "student")
+        detail = client.get(f"/api/admin/users/{student_id}", headers=admin_headers).json()
+        assert detail["recent_attempts"][0]["mode"] == "strict"
 
 
 class TestProgressEndpoints:

@@ -27,6 +27,7 @@ export class TickEngine {
   private context: AudioContext | null = null
   private timers: number[] = []
   private metronomeTimer: number | null = null
+  private metronomeBeatTimers: number[] = []
   private nextMetronomeBeat = 0
 
   private ensureContext(): AudioContext {
@@ -68,16 +69,31 @@ export class TickEngine {
    * Click steadily at `bpm` until `stopMetronome()` is called. Beats are scheduled a
    * short window ahead on the audio clock so they stay even regardless of main-thread
    * timer jitter.
+   *
+   * `onBeat(index, wallTimeMs)` fires around the time each beat sounds. `wallTimeMs`
+   * is the beat's position on the `performance.now()` clock *computed from the audio
+   * schedule*, so it stays accurate even when the callback itself fires late — use it
+   * (not the callback time) to anchor tap timestamps to the grid.
    */
-  startMetronome(bpm: number): void {
+  startMetronome(bpm: number, onBeat?: (index: number, wallTimeMs: number) => void): void {
     this.stopMetronome()
     const context = this.ensureContext()
     const beatSeconds = 60 / bpm
     const lookaheadSeconds = 0.2
     this.nextMetronomeBeat = context.currentTime + 0.05
+    let beatIndex = 0
     const scheduleWindow = () => {
       while (this.nextMetronomeBeat < context.currentTime + lookaheadSeconds) {
         this.click(context, this.nextMetronomeBeat, 'metronome')
+        if (onBeat) {
+          const delayMs = Math.max(0, (this.nextMetronomeBeat - context.currentTime) * 1000)
+          const wallTimeMs = performance.now() + delayMs
+          const index = beatIndex
+          this.metronomeBeatTimers.push(
+            window.setTimeout(() => onBeat(index, wallTimeMs), delayMs),
+          )
+        }
+        beatIndex += 1
         this.nextMetronomeBeat += beatSeconds
       }
     }
@@ -90,6 +106,10 @@ export class TickEngine {
       window.clearInterval(this.metronomeTimer)
       this.metronomeTimer = null
     }
+    for (const timer of this.metronomeBeatTimers) {
+      window.clearTimeout(timer)
+    }
+    this.metronomeBeatTimers = []
   }
 
   get metronomeRunning(): boolean {

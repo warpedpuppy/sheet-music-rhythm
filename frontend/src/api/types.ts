@@ -64,10 +64,13 @@ export interface NoteResult {
   verdict: Verdict
 }
 
+export type AttemptMode = 'free' | 'strict'
+
 export interface AttemptResult {
   attempt_id: number
   passed: boolean
   gave_up: boolean
+  mode: AttemptMode
   accuracy: number
   note_results: NoteResult[]
   inferred_bpm: number | null

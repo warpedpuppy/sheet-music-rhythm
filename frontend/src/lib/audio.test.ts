@@ -134,5 +134,39 @@ describe('TickEngine', () => {
       engine.cancelAll()
       expect(engine.metronomeRunning).toBe(false)
     })
+
+    it('reports each beat with an index and a wall-clock time one beat period apart', () => {
+      // The wall time passed to onBeat is derived from performance.now(), so fake it
+      // alongside the timers and advance the audio clock in lockstep, the way real
+      // clocks move together.
+      vi.useFakeTimers({
+        toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'],
+      })
+      const engine = new TickEngine()
+      const onBeat = vi.fn()
+      engine.startMetronome(60, onBeat) // 1000 ms per beat
+
+      // The mock AudioContext derives currentTime from performance.now(), which is
+      // faked here, so advancing the timers advances the audio clock in lockstep.
+      for (let step = 0; step < 35; step++) {
+        vi.advanceTimersByTime(100)
+      }
+
+      expect(onBeat.mock.calls.length).toBeGreaterThanOrEqual(3)
+      const indices = onBeat.mock.calls.map((call) => call[0] as number)
+      expect(indices.slice(0, 3)).toEqual([0, 1, 2])
+      const times = onBeat.mock.calls.map((call) => call[1] as number)
+      expect(times[1] - times[0]).toBeCloseTo(1000, 0)
+      expect(times[2] - times[1]).toBeCloseTo(1000, 0)
+    })
+
+    it('stops firing beat callbacks once stopped', () => {
+      const engine = new TickEngine()
+      const onBeat = vi.fn()
+      engine.startMetronome(60, onBeat)
+      engine.stopMetronome()
+      vi.advanceTimersByTime(5000)
+      expect(onBeat).not.toHaveBeenCalled()
+    })
   })
 })
