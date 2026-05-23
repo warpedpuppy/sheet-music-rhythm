@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { api } from '../api/client'
 import type { AttemptResult, Exercise } from '../api/types'
+import { tickEngine } from '../lib/audio'
 import { ExercisePlayer } from './ExercisePlayer'
 
 const EXERCISE: Exercise = {
@@ -94,6 +95,30 @@ describe('ExercisePlayer', () => {
 
     expect(await screen.findByText(/Passed!/)).toBeInTheDocument()
     expect(screen.getByText(/Accuracy: 100%/)).toBeInTheDocument()
+  })
+
+  it('runs the metronome at the exercise tempo while capturing and stops it after', async () => {
+    vi.spyOn(api, 'getExercise').mockResolvedValue(EXERCISE)
+    vi.spyOn(api, 'submitAttempt').mockResolvedValue(PASSED_RESULT)
+    const startSpy = vi.spyOn(tickEngine, 'startMetronome')
+    const stopSpy = vi.spyOn(tickEngine, 'stopMetronome')
+    renderPlayer()
+    await screen.findByText('Four steady quarters')
+
+    expect(screen.queryByTestId('metronome')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    expect(startSpy).toHaveBeenCalledWith(EXERCISE.tempo_bpm)
+    expect(tickEngine.metronomeRunning).toBe(true)
+    const metronome = screen.getByTestId('metronome')
+    expect(metronome).toHaveAttribute('data-running', 'true')
+    expect(metronome.querySelector('.metronome-pendulum.swinging')).not.toBeNull()
+
+    await tapSpace(4)
+    await screen.findByText(/Passed!/)
+    expect(stopSpy).toHaveBeenCalled()
+    expect(tickEngine.metronomeRunning).toBe(false)
+    expect(screen.queryByTestId('metronome')).not.toBeInTheDocument()
   })
 
   it('submits a gave_up attempt after the give-up playback finishes', async () => {

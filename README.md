@@ -65,10 +65,12 @@ Open http://localhost:5173, create an account (or log in as `demo`), and start t
 
 1. The rhythm is rendered on a percussion staff. A link under the title points to the
    Learn section that explains the concept being practiced.
-2. Press **Start**, then tap the **spacebar** in the rhythm of the notes shown. There is
-   no metronome and no count-in: you set the speed, each tap plays a tick, and the
-   attempt ends as soon as you have tapped as many notes as are on the page. Tap only
-   where notes begin — never during rests or on the second note of a tie.
+2. Press **Start**, then tap the **spacebar** in the rhythm of the notes shown. A
+   metronome starts ticking at the exercise's written tempo — a softer, lower "tock" at
+   half the volume of the spacebar tick, with a pendulum swinging on screen — as a
+   pacing guide only: scoring is still free-tempo, so you set the speed and the attempt
+   ends as soon as you have tapped as many notes as are on the page. Tap only where
+   notes begin — never during rests or on the second note of a tie.
 3. Your taps are sent to the backend, which anchors your first tap to the first note,
    infers your tempo from the span of your taps, and checks whether each note landed
    where the notation says it should. Each note is marked on time / early / late /

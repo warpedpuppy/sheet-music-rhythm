@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { AttemptResult, Exercise } from '../api/types'
+import { Metronome } from '../components/Metronome'
 import { RhythmStaff } from '../components/RhythmStaff'
 import type { DotMarker } from '../components/RhythmStaff'
 import { useTapCapture } from '../hooks/useTapCapture'
@@ -43,6 +44,7 @@ export function ExercisePlayer() {
     expectedTaps: exercise?.tap_count ?? Infinity,
     onTap: () => tickEngine.tick('tap'),
     onComplete: (tapsMs) => {
+      tickEngine.stopMetronome()
       setLastTaps(tapsMs)
       void submitAttempt(tapsMs, false)
     },
@@ -73,16 +75,18 @@ export function ExercisePlayer() {
   }, [id, resetCapture])
 
   function handleStart() {
+    if (!exercise) return
     setResult(null)
     setShowPlayed(false)
     setPlayingIndex(null)
-    tickEngine.tick('tap')
+    tickEngine.startMetronome(exercise.tempo_bpm)
     setPhase('capturing')
     tapCapture.start()
   }
 
   function handleGiveUp() {
     if (!exercise) return
+    tickEngine.stopMetronome()
     tapCapture.reset()
     setResult(null)
     setShowPlayed(false)
@@ -181,10 +185,14 @@ export function ExercisePlayer() {
 
       {phase === 'capturing' && (
         <div className="capturing-hint" role="status">
-          Tap the <strong>spacebar</strong> in the rhythm shown above — you set the speed.{' '}
-          <span className="tap-progress">
-            {tapCapture.taps.length} / {exercise.tap_count} taps
-          </span>
+          <Metronome bpm={exercise.tempo_bpm} running />
+          <div>
+            Tap the <strong>spacebar</strong> in the rhythm shown above. The metronome is
+            ticking at the written tempo as a guide, but you set the speed.{' '}
+            <span className="tap-progress">
+              {tapCapture.taps.length} / {exercise.tap_count} taps
+            </span>
+          </div>
         </div>
       )}
 

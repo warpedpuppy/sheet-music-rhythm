@@ -403,7 +403,49 @@
   font-weight: 600;
 }
 
+.metronome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.metronome-bpm {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.metronome-pendulum {
+  transform-box: view-box;
+  transform-origin: 50px 104px;
+  transform: rotate(0deg);
+}
+
+.metronome-pendulum.swinging {
+  animation-name: metronome-swing;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes metronome-swing {
+  0% {
+    transform: rotate(-24deg);
+  }
+  50% {
+    transform: rotate(24deg);
+  }
+  100% {
+    transform: rotate(-24deg);
+  }
+}
+
 .capturing-hint {
+  display: flex;
+  align-items: center;
+  gap: 20px;
   border: 2px dashed var(--accent);
   border-radius: 10px;
   padding: 14px 18px;
