@@ -100,6 +100,9 @@ export function UsersTable() {
                       <td className={attempt.passed ? 'outcome-passed' : 'outcome-failed'}>
                         {attempt.gave_up ? 'gave up' : attempt.passed ? 'passed' : 'failed'}
                       </td>
+                      <td className="muted">
+                        {attempt.mode === 'strict' ? 'strict' : 'free tempo'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

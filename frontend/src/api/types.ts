@@ -124,6 +124,7 @@ export interface AdminAttempt {
   accuracy: number
   passed: boolean
   gave_up: boolean
+  mode: AttemptMode
   created_at: string
 }
 
