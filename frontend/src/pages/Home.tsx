@@ -9,8 +9,8 @@ export function Home() {
       <section className="hero-section">
         <h1>Learn to read rhythm.</h1>
         <p className="hero-subtitle">
-          See the notation, feel the beat, and tap the spacebar in time. Rhythm Trainer listens to
-          your timing, scores every note, and adapts the exercises to exactly what you need to
+          See the notation, feel the beat, and tap it out on the spacebar. Rhythm Trainer listens
+          to your timing, scores every note, and adapts the exercises to exactly what you need to
           practice next.
         </p>
         <div className="hero-actions">
@@ -38,8 +38,8 @@ export function Home() {
         <div className="feature-card">
           <h3>Tap along</h3>
           <p>
-            Every exercise gives you a metronome count-in, then you tap the spacebar in time with
-            the printed rhythm. You get note-by-note feedback: on time, early, late, or missed.
+            Read the printed rhythm and tap it out on the spacebar at your own speed — every tap
+            ticks back at you. You get note-by-note feedback: on time, early, late, or missed.
           </p>
         </div>
         <div className="feature-card">

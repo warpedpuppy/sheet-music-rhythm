@@ -1,8 +1,8 @@
-"""Pure rhythm math: pattern validation and expected-onset computation.
+"""Pure rhythm math: pattern validation and onset computation.
 
-All times are in milliseconds. Taps are submitted relative to the first
-count-in click; the count-in is one full measure, so expected onsets are
-offset by count_in_ms.
+Onsets are expressed in beats (quarter-note units) starting at 0. There is no
+metronome or count-in: the user taps at their own tempo, and scoring fits a
+beat duration to their taps.
 """
 
 DURATION_BEATS = {"w": 4.0, "h": 2.0, "q": 1.0, "8": 0.5, "16": 0.25}
@@ -61,29 +61,30 @@ def beat_ms(tempo_bpm: int) -> float:
     return 60000.0 / tempo_bpm
 
 
-def count_in_ms(time_signature: str, tempo_bpm: int) -> float:
-    return beats_per_measure(time_signature) * beat_ms(tempo_bpm)
-
-
-def expected_onsets(pattern: dict, time_signature: str, tempo_bpm: int) -> list[float]:
-    """Onset times (ms, relative to the first count-in click) the user must tap.
+def onset_beats(pattern: dict) -> list[float]:
+    """Beat positions (starting at 0) of every event the user must tap.
 
     Rests and tied-into notes consume time but produce no onset.
     """
-    bms = beat_ms(tempo_bpm)
-    t = count_in_ms(time_signature, tempo_bpm)
+    t = 0.0
     onsets: list[float] = []
     tied_into = False
     for event in pattern.get("events", []):
         if event.get("type") == "note" and not tied_into:
             onsets.append(t)
-        t += event_beats(event) * bms
+        t += event_beats(event)
         tied_into = bool(event.get("tieToNext")) and event.get("type") == "note"
     return onsets
 
 
-def total_duration_ms(pattern: dict, time_signature: str, tempo_bpm: int) -> float:
-    """Length of the exercise (count-in + all events), in ms."""
-    bms = beat_ms(tempo_bpm)
-    events_ms = sum(event_beats(e) for e in pattern.get("events", [])) * bms
-    return count_in_ms(time_signature, tempo_bpm) + events_ms
+def onset_durations_beats(pattern: dict) -> list[float]:
+    """For each onset, the notated length in beats (ties included)."""
+    durations: list[float] = []
+    tied_into = False
+    for event in pattern.get("events", []):
+        if event.get("type") == "note" and not tied_into:
+            durations.append(event_beats(event))
+        elif event.get("type") == "note" and tied_into and durations:
+            durations[-1] += event_beats(event)
+        tied_into = bool(event.get("tieToNext")) and event.get("type") == "note"
+    return durations

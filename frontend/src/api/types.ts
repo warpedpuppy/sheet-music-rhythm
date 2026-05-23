@@ -41,8 +41,6 @@ export interface Exercise {
   pattern: Pattern
   concept_tags: string[]
   learn_section_slug: string | null
-  count_in_beats: number
-  tolerance_ms: number
   user_status: UserExerciseStatus | null
 }
 
@@ -68,10 +66,10 @@ export interface AttemptResult {
   attempt_id: number
   gave_up: boolean
   results: NoteResult[]
-  extra_taps: number[]
   accuracy: number | null
   passed: boolean
-  tolerance_ms: number
+  detected_tempo_bpm: number | null
+  played_pattern: Pattern | null
   progression: ProgressionInfo
 }
 

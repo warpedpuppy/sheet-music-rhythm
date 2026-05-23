@@ -71,4 +71,16 @@ describe('useTapCapture', () => {
     act(() => result.current.reset())
     expect(result.current.taps).toHaveLength(0)
   })
+
+  it('fires onTap for every accepted tap (and not for repeats)', () => {
+    vi.spyOn(performance, 'now').mockReturnValue(2000)
+    const onTap = vi.fn()
+    renderHook(() => useTapCapture(true, 1000, onTap))
+
+    act(() => pressSpace())
+    act(() => pressSpace({ repeat: true }))
+    act(() => pressSpace())
+
+    expect(onTap).toHaveBeenCalledTimes(2)
+  })
 })

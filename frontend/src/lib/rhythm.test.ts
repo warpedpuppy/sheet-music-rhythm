@@ -3,12 +3,12 @@ import type { Pattern, PatternEvent } from '../api/types'
 import {
   beatMs,
   beatsPerMeasure,
-  countInMs,
   eventBeats,
   expectedOnsets,
+  onsetCount,
   onsetEventIndices,
+  patternDurationMs,
   splitIntoMeasures,
-  totalDurationMs,
 } from './rhythm'
 
 const n = (duration: PatternEvent['duration'], dots = 0, tieToNext = false): PatternEvent => ({
@@ -50,38 +50,36 @@ describe('beatsPerMeasure / beatMs', () => {
 })
 
 describe('expectedOnsets', () => {
-  it('offsets onsets by a one-measure count-in', () => {
-    expect(countInMs('4/4', 60)).toBe(4000)
-    expect(expectedOnsets(p(n('q'), n('q'), n('q'), n('q')), '4/4', 60)).toEqual([
-      4000, 5000, 6000, 7000,
-    ])
+  it('starts at zero with no count-in', () => {
+    expect(expectedOnsets(p(n('q'), n('q'), n('q'), n('q')), 60)).toEqual([0, 1000, 2000, 3000])
   })
 
   it('skips rests', () => {
-    expect(expectedOnsets(p(n('q'), r('q'), n('h')), '4/4', 60)).toEqual([4000, 6000])
+    expect(expectedOnsets(p(n('q'), r('q'), n('h')), 60)).toEqual([0, 2000])
   })
 
   it('handles dotted notes', () => {
-    expect(expectedOnsets(p(n('q', 1), n('8'), n('h')), '4/4', 60)).toEqual([4000, 5500, 6000])
+    expect(expectedOnsets(p(n('q', 1), n('8'), n('h')), 60)).toEqual([0, 1500, 2000])
   })
 
   it('does not create an onset for a tied-into note', () => {
-    const onsets = expectedOnsets(p(n('q'), n('q', 0, true), n('q'), n('q')), '4/4', 60)
-    expect(onsets).toEqual([4000, 5000, 7000])
+    const onsets = expectedOnsets(p(n('q'), n('q', 0, true), n('q'), n('q')), 60)
+    expect(onsets).toEqual([0, 1000, 3000])
   })
 })
 
-describe('onsetEventIndices', () => {
+describe('onsetEventIndices / onsetCount', () => {
   it('maps each onset to the pattern event that produces it', () => {
     const pattern = p(n('q'), r('q'), n('q', 0, true), n('q'), n('q'))
     expect(onsetEventIndices(pattern)).toEqual([0, 2, 4])
+    expect(onsetCount(pattern)).toBe(3)
   })
 })
 
-describe('totalDurationMs', () => {
-  it('includes the count-in and all events', () => {
-    expect(totalDurationMs(p(n('q'), n('q'), n('q'), n('q')), '4/4', 60)).toBe(8000)
-    expect(totalDurationMs(p(n('h', 1)), '3/4', 60)).toBe(6000)
+describe('patternDurationMs', () => {
+  it('totals all events at the given tempo', () => {
+    expect(patternDurationMs(p(n('q'), n('q'), n('q'), n('q')), 60)).toBe(4000)
+    expect(patternDurationMs(p(n('h', 1)), 60)).toBe(3000)
   })
 })
 

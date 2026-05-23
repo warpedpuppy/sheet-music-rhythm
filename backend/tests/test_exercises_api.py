@@ -26,8 +26,7 @@ def test_list_exercises_includes_user_status_and_locked_flag(client, user_token,
     assert level1["user_status"]["locked"] is False
     assert level1["user_status"]["passed"] is False
     assert level2["user_status"]["locked"] is True
-    assert level1["tolerance_ms"] > 0
-    assert level1["count_in_beats"] == 4
+    assert len(level1["pattern"]["events"]) == 8
 
 
 def test_get_exercise_detail(client, user_token, exercises):

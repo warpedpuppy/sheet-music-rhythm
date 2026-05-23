@@ -53,9 +53,7 @@ def submit_attempt(
             ),
         )
 
-    score = scoring.score_attempt(
-        exercise.pattern, exercise.time_signature, exercise.tempo_bpm, payload.taps_ms
-    )
+    score = scoring.score_attempt(exercise.pattern, payload.taps_ms)
     note_results = [
         NoteResult(
             index=r.index,
@@ -72,7 +70,8 @@ def submit_attempt(
         taps=payload.taps_ms,
         results={
             "notes": [r.model_dump() for r in note_results],
-            "extra_taps": score.extra_taps,
+            "detected_tempo_bpm": score.detected_tempo_bpm,
+            "played_pattern": score.played_pattern,
         },
         accuracy=score.accuracy,
         passed=score.passed,
@@ -89,10 +88,10 @@ def submit_attempt(
         attempt_id=attempt.id,
         gave_up=False,
         results=note_results,
-        extra_taps=score.extra_taps,
         accuracy=score.accuracy,
         passed=score.passed,
-        tolerance_ms=score.tolerance_ms,
+        detected_tempo_bpm=score.detected_tempo_bpm,
+        played_pattern=score.played_pattern,
         progression=ProgressionInfo(
             unlocked_level=update.unlocked_level,
             leveled_up=update.leveled_up,

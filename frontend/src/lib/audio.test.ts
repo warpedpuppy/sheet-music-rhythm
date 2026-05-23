@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AudioEngine, buildExerciseTicks, buildPlaybackTicks } from './audio'
+import { AudioEngine, buildPlaybackTicks } from './audio'
 import type { ScheduledTick } from './audio'
 
 interface FakeContext {
@@ -55,15 +55,23 @@ describe('AudioEngine', () => {
     vi.useRealTimers()
   })
 
-  it('fires tick callbacks in order and onDone at the end', () => {
+  it('clickNow plays a tick immediately', () => {
+    const { ctx, oscillatorsStarted } = makeFakeContext()
+    const engine = new AudioEngine(() => ctx as unknown as AudioContext)
+    engine.clickNow()
+    engine.clickNow()
+    expect(oscillatorsStarted()).toBe(2)
+  })
+
+  it('fires playback tick callbacks in order and onDone at the end', () => {
     const { ctx, oscillatorsStarted } = makeFakeContext()
     const engine = new AudioEngine(() => ctx as unknown as AudioContext)
 
     const ticks: ScheduledTick[] = [
-      { timeMs: 0, kind: 'count', index: 0, accent: true },
-      { timeMs: 500, kind: 'count', index: 1 },
-      { timeMs: 1000, kind: 'note', index: 0 },
-      { timeMs: 1500, kind: 'end', index: 0, silent: true },
+      { timeMs: 0, kind: 'note', index: 0 },
+      { timeMs: 500, kind: 'note', index: 1 },
+      { timeMs: 1500, kind: 'note', index: 2 },
+      { timeMs: 2000, kind: 'end', index: 0, silent: true },
     ]
 
     const fired: string[] = []
@@ -76,12 +84,12 @@ describe('AudioEngine', () => {
     })
 
     // Advance simulated audio clock and timers together (engine starts 150 ms in).
-    for (let elapsed = 0; elapsed <= 2000; elapsed += 25) {
+    for (let elapsed = 0; elapsed <= 2500; elapsed += 25) {
       ctx.currentTime = (150 + elapsed) / 1000
       vi.advanceTimersByTime(25)
     }
 
-    expect(fired).toEqual(['count:0', 'count:1', 'note:0', 'end:0'])
+    expect(fired).toEqual(['note:0', 'note:1', 'note:2', 'end:0'])
     expect(done).toBe(true)
     // The silent end tick must not produce a click.
     expect(oscillatorsStarted()).toBe(3)
@@ -94,10 +102,10 @@ describe('AudioEngine', () => {
 
     engine.start(
       [
-        { timeMs: 0, kind: 'count', index: 0 },
-        { timeMs: 5000, kind: 'note', index: 0 },
+        { timeMs: 0, kind: 'note', index: 0 },
+        { timeMs: 5000, kind: 'note', index: 1 },
       ],
-      { onTick: (tick) => fired.push(tick.kind) },
+      { onTick: (tick) => fired.push(`${tick.kind}:${tick.index}`) },
     )
 
     ctx.currentTime = 0.2
@@ -106,28 +114,19 @@ describe('AudioEngine', () => {
     ctx.currentTime = 10
     vi.advanceTimersByTime(10000)
 
-    expect(fired).toEqual(['count'])
+    expect(fired).toEqual(['note:0'])
   })
 })
 
-describe('tick builders', () => {
-  it('buildExerciseTicks creates count-in, quiet beats, and a silent end tick', () => {
-    const ticks = buildExerciseTicks(4, 500, 4000)
-    const counts = ticks.filter((t) => t.kind === 'count')
-    const beats = ticks.filter((t) => t.kind === 'beat')
+describe('buildPlaybackTicks', () => {
+  it('schedules a note tick for every onset plus a silent end marker', () => {
+    const ticks = buildPlaybackTicks([0, 500, 1500], 2000)
+    const notes = ticks.filter((t) => t.kind === 'note')
     const ends = ticks.filter((t) => t.kind === 'end')
-    expect(counts).toHaveLength(4)
-    expect(counts[0].accent).toBe(true)
-    expect(beats).toHaveLength(4)
+    expect(notes.map((t) => t.timeMs)).toEqual([0, 500, 1500])
+    expect(notes.map((t) => t.index)).toEqual([0, 1, 2])
     expect(ends).toHaveLength(1)
     expect(ends[0].silent).toBe(true)
-    expect(ends[0].timeMs).toBeGreaterThan(4000)
-  })
-
-  it('buildPlaybackTicks schedules a note tick for every onset', () => {
-    const ticks = buildPlaybackTicks(4, 500, [2000, 2500, 3500], 4000)
-    const notes = ticks.filter((t) => t.kind === 'note')
-    expect(notes.map((t) => t.timeMs)).toEqual([2000, 2500, 3500])
-    expect(notes.map((t) => t.index)).toEqual([0, 1, 2])
+    expect(ends[0].timeMs).toBeGreaterThan(2000)
   })
 })

@@ -6,16 +6,12 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models import Exercise, User, UserExerciseProgress
 from ..schemas import ExerciseOut, UserExerciseStatus
-from ..services import rhythm, scoring
 
 router = APIRouter(prefix="/api/exercises", tags=["exercises"])
 
 
 def exercise_to_out(exercise: Exercise, user_status: UserExerciseStatus | None = None) -> ExerciseOut:
-    beats = rhythm.beats_per_measure(exercise.time_signature)
     out = ExerciseOut.model_validate(exercise)
-    out.count_in_beats = int(beats)
-    out.tolerance_ms = round(scoring.tolerance_for(rhythm.beat_ms(exercise.tempo_bpm)), 1)
     out.user_status = user_status
     return out
 

@@ -4,11 +4,11 @@ import { api } from '../api/client'
 import type { AttemptResult, Exercise, NextExercise, NoteStatus } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { RhythmStaff } from '../components/RhythmStaff'
-import { AudioEngine, buildExerciseTicks, buildPlaybackTicks } from '../lib/audio'
-import { beatMs, expectedOnsets, onsetEventIndices, totalDurationMs } from '../lib/rhythm'
+import { AudioEngine, buildPlaybackTicks } from '../lib/audio'
+import { expectedOnsets, onsetEventIndices, patternDurationMs } from '../lib/rhythm'
 import { useTapCapture } from '../hooks/useTapCapture'
 
-type Phase = 'loading' | 'idle' | 'counting' | 'recording' | 'submitting' | 'results' | 'playback'
+type Phase = 'loading' | 'idle' | 'recording' | 'submitting' | 'results' | 'playback'
 
 export function ExercisePlayer() {
   const { id } = useParams()
@@ -17,11 +17,11 @@ export function ExercisePlayer() {
 
   const [exercise, setExercise] = useState<Exercise | null>(null)
   const [phase, setPhase] = useState<Phase>('loading')
-  const [countBeat, setCountBeat] = useState<number | null>(null)
   const [startTime, setStartTime] = useState<number | null>(null)
   const [result, setResult] = useState<AttemptResult | null>(null)
   const [playbackEventIndex, setPlaybackEventIndex] = useState<number | null>(null)
   const [next, setNext] = useState<NextExercise | null>(null)
+  const [showPlayed, setShowPlayed] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const audioRef = useRef<AudioEngine | null>(null)
@@ -32,12 +32,9 @@ export function ExercisePlayer() {
     return audioRef.current
   }
 
-  const capturing = phase === 'counting' || phase === 'recording'
-  const { taps, reset: resetTaps } = useTapCapture(capturing, startTime)
-  const tapsRef = useRef<number[]>([])
-  useEffect(() => {
-    tapsRef.current = taps
-  }, [taps])
+  const { taps, reset: resetTaps } = useTapCapture(phase === 'recording', startTime, () =>
+    getAudio().clickNow(),
+  )
 
   useEffect(() => {
     setPhase('loading')
@@ -45,7 +42,7 @@ export function ExercisePlayer() {
     setResult(null)
     setNext(null)
     setError(null)
-    setCountBeat(null)
+    setShowPlayed(false)
     setPlaybackEventIndex(null)
     api
       .getExercise(Number(id))
@@ -67,6 +64,7 @@ export function ExercisePlayer() {
     () => (exercise ? onsetEventIndices(exercise.pattern) : []),
     [exercise],
   )
+  const expectedCount = eventIndices.length
 
   const noteStatuses = useMemo(() => {
     if (!result || result.gave_up) return undefined
@@ -87,6 +85,7 @@ export function ExercisePlayer() {
       try {
         const attempt = await api.submitAttempt(exercise.id, tapsMs, gaveUp)
         setResult(attempt)
+        setShowPlayed(false)
         setPhase('results')
         void refreshUser()
         api.getNextExercise().then(setNext).catch(() => setNext(null))
@@ -98,70 +97,53 @@ export function ExercisePlayer() {
     [exercise, refreshUser],
   )
 
+  // The attempt is complete as soon as the user has tapped every note on the page.
+  useEffect(() => {
+    if (phase === 'recording' && expectedCount > 0 && taps.length >= expectedCount) {
+      void submitAttempt(taps, false)
+    }
+  }, [phase, taps, expectedCount, submitAttempt])
+
   const handleStart = useCallback(() => {
-    if (!exercise) return
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
+    getAudio() // create the AudioContext on a user gesture so the first tap can tick
     setResult(null)
     setNext(null)
+    setShowPlayed(false)
     resetTaps()
-    setPhase('counting')
-
-    const bms = beatMs(exercise.tempo_bpm)
-    const total = totalDurationMs(exercise.pattern, exercise.time_signature, exercise.tempo_bpm)
-    const ticks = buildExerciseTicks(exercise.count_in_beats, bms, total)
-    const start = getAudio().start(ticks, {
-      onTick: (tick) => {
-        if (tick.kind === 'count') {
-          setCountBeat(tick.index)
-        } else if (tick.kind === 'beat') {
-          setCountBeat(null)
-          setPhase((current) => (current === 'counting' ? 'recording' : current))
-        }
-      },
-      onDone: () => {
-        setCountBeat(null)
-        void submitAttempt(tapsRef.current, false)
-      },
-    })
-    setStartTime(start)
-  }, [exercise, resetTaps, submitAttempt])
+    setStartTime(performance.now())
+    setPhase('recording')
+  }, [resetTaps])
 
   const playRhythm = useCallback(
     (recordGiveUp: boolean) => {
       if (!exercise) return
       getAudio().stop()
-      setCountBeat(null)
       setPhase('playback')
 
-      const bms = beatMs(exercise.tempo_bpm)
-      const total = totalDurationMs(exercise.pattern, exercise.time_signature, exercise.tempo_bpm)
-      const onsets = expectedOnsets(exercise.pattern, exercise.time_signature, exercise.tempo_bpm)
-      const ticks = buildPlaybackTicks(exercise.count_in_beats, bms, onsets, total)
+      const onsets = expectedOnsets(exercise.pattern, exercise.tempo_bpm)
+      const total = patternDurationMs(exercise.pattern, exercise.tempo_bpm)
+      const ticks = buildPlaybackTicks(onsets, total)
 
       getAudio().start(ticks, {
         onTick: (tick) => {
-          if (tick.kind === 'count') {
-            setCountBeat(tick.index)
-            setPlaybackEventIndex(null)
-          } else if (tick.kind === 'note') {
-            setCountBeat(null)
+          if (tick.kind === 'note') {
             setPlaybackEventIndex(eventIndices[tick.index] ?? null)
           }
         },
         onDone: () => {
           setPlaybackEventIndex(null)
-          setCountBeat(null)
           if (recordGiveUp) {
-            void submitAttempt(tapsRef.current, true)
+            void submitAttempt(taps, true)
           } else {
             setPhase((current) => (current === 'playback' ? 'results' : current))
           }
         },
       })
     },
-    [exercise, eventIndices, submitAttempt],
+    [exercise, eventIndices, taps, submitAttempt],
   )
 
   const handleNext = useCallback(() => {
@@ -186,6 +168,7 @@ export function ExercisePlayer() {
 
   const accuracyPercent =
     result && result.accuracy != null ? Math.round(result.accuracy * 100) : null
+  const madeAMistake = result != null && !result.gave_up && (result.accuracy ?? 0) < 1
 
   return (
     <div className="exercise-player">
@@ -193,8 +176,8 @@ export function ExercisePlayer() {
         <div>
           <h1>{exercise.title}</h1>
           <p className="exercise-meta">
-            Level {exercise.difficulty} · {exercise.time_signature} · {exercise.tempo_bpm} BPM ·{' '}
-            {exercise.num_measures} measures
+            Level {exercise.difficulty} · {exercise.time_signature} · {exercise.num_measures}{' '}
+            measures · {expectedCount} notes
           </p>
         </div>
         {exercise.learn_section_slug && (
@@ -215,25 +198,15 @@ export function ExercisePlayer() {
         <div className="player-status" aria-live="polite">
           {phase === 'idle' && (
             <p>
-              Press <strong>Start</strong>, listen to the {exercise.count_in_beats}-beat count-in,
-              then tap the <kbd>spacebar</kbd> in time with the rhythm.
-            </p>
-          )}
-          {phase === 'counting' && (
-            <p className="status-counting">
-              Count-in:{' '}
-              <span className="count-beats">
-                {Array.from({ length: exercise.count_in_beats }, (_, i) => (
-                  <span key={i} className={`count-beat ${countBeat === i ? 'active' : ''}`}>
-                    {i + 1}
-                  </span>
-                ))}
-              </span>
+              Press <strong>Start</strong>, then hit the <kbd>spacebar</kbd> in the rhythm of the
+              notes shown. You set the speed — what matters is how the notes relate to each other.
+              Each tap makes a tick, and the exercise ends after {expectedCount} taps.
             </p>
           )}
           {phase === 'recording' && (
             <p className="status-recording">
-              <span className="recording-dot" /> Tap the rhythm now — {taps.length} taps
+              <span className="recording-dot" /> Tap the spacebar in the rhythm shown —{' '}
+              {taps.length} of {expectedCount} notes
             </p>
           )}
           {phase === 'submitting' && <p>Scoring your rhythm…</p>}
@@ -250,14 +223,15 @@ export function ExercisePlayer() {
               ) : (
                 <>
                   <p className="result-headline">
-                    {result.passed ? 'Passed!' : 'Not quite — keep practicing.'}{' '}
+                    {result.passed ? 'You got it!' : 'Not quite — keep practicing.'}{' '}
                     <strong>{accuracyPercent}%</strong> accuracy
                   </p>
                   <p className="result-detail">
                     {result.results.filter((r) => r.status === 'hit').length} on time ·{' '}
                     {result.results.filter((r) => r.status === 'early' || r.status === 'late').length}{' '}
                     early/late · {result.results.filter((r) => r.status === 'missed').length} missed
-                    {result.extra_taps.length > 0 && ` · ${result.extra_taps.length} extra taps`}
+                    {result.detected_tempo_bpm != null &&
+                      ` · you played at about ${result.detected_tempo_bpm} BPM`}
                   </p>
                 </>
               )}
@@ -279,7 +253,7 @@ export function ExercisePlayer() {
               {phase === 'results' ? 'Try again' : 'Start'}
             </button>
           )}
-          {(phase === 'idle' || phase === 'counting' || phase === 'recording') && (
+          {(phase === 'idle' || phase === 'recording') && (
             <button type="button" className="btn btn-giveup" onClick={() => playRhythm(true)}>
               I give up — play it for me
             </button>
@@ -289,6 +263,11 @@ export function ExercisePlayer() {
               <button type="button" className="btn" onClick={() => playRhythm(false)}>
                 Hear the correct rhythm
               </button>
+              {madeAMistake && result?.played_pattern && (
+                <button type="button" className="btn" onClick={() => setShowPlayed((s) => !s)}>
+                  {showPlayed ? 'Hide what you actually played' : 'Show what you actually played'}
+                </button>
+              )}
               {result?.passed && (
                 <button type="button" className="btn btn-primary" onClick={handleNext}>
                   Next exercise →
@@ -303,6 +282,22 @@ export function ExercisePlayer() {
           )}
         </div>
       </div>
+
+      {phase === 'results' && showPlayed && result?.played_pattern && (
+        <div className="card played-rhythm">
+          <h3>What you actually played</h3>
+          <RhythmStaff
+            pattern={result.played_pattern}
+            timeSignature={exercise.time_signature}
+            height={130}
+          />
+          <p className="muted">
+            Your taps, written out as the closest note values
+            {result.detected_tempo_bpm != null && ` at roughly ${result.detected_tempo_bpm} BPM`}.
+            Compare it with the exercise above.
+          </p>
+        </div>
+      )}
 
       <div className="exercise-tags">
         {exercise.concept_tags.map((tag) => (

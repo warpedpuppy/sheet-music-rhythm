@@ -1,18 +1,16 @@
 /** Web Audio click synthesis with a lookahead scheduler.
  *
- * All clicks are short oscillator bursts; nothing is loaded from disk. The
- * scheduler runs on a 25 ms interval and schedules audio up to 120 ms ahead on
- * the AudioContext clock, while UI callbacks fire from the same loop as each
- * tick's time is reached.
+ * All clicks are short oscillator bursts; nothing is loaded from disk. There is
+ * no automatic metronome: ticks are either triggered directly by the user's
+ * spacebar taps (clickNow) or scheduled for the "I give up" rhythm playback.
  */
 
 export interface ScheduledTick {
-  /** Time in ms relative to playback start (tick 0 of the count-in). */
+  /** Time in ms relative to playback start. */
   timeMs: number
-  kind: 'count' | 'beat' | 'note' | 'end'
-  /** Index within its kind (count-in beat number, onset index, ...). */
+  kind: 'note' | 'end'
+  /** Onset index for note ticks. */
   index: number
-  accent?: boolean
   /** If true, no sound is played; the tick only fires its callback. */
   silent?: boolean
 }
@@ -46,16 +44,14 @@ export class AudioEngine {
     return this.ctx
   }
 
-  private click(when: number, accent: boolean, kind: ScheduledTick['kind']): void {
+  private click(when: number): void {
     if (!this.ctx) return
     const osc = this.ctx.createOscillator()
     const gain = this.ctx.createGain()
-    const frequency = kind === 'note' ? 1700 : accent ? 1300 : 900
     osc.type = 'square'
-    osc.frequency.setValueAtTime(frequency, when)
-    const peak = kind === 'beat' ? 0.12 : 0.3
+    osc.frequency.setValueAtTime(1700, when)
     gain.gain.setValueAtTime(0.0001, when)
-    gain.gain.exponentialRampToValueAtTime(peak, when + 0.002)
+    gain.gain.exponentialRampToValueAtTime(0.3, when + 0.002)
     gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.06)
     osc.connect(gain)
     gain.connect(this.ctx.destination)
@@ -63,10 +59,15 @@ export class AudioEngine {
     osc.stop(when + 0.08)
   }
 
+  /** Plays a tick immediately — used as feedback for each spacebar tap. */
+  clickNow(): void {
+    const ctx = this.ensureContext()
+    this.click(ctx.currentTime + 0.001)
+  }
+
   /**
-   * Starts playback of the given ticks. Returns the performance.now() value
-   * that corresponds to timeMs = 0, so callers can timestamp taps relative to
-   * the first count-in click.
+   * Starts scheduled playback of the given ticks (the "I give up" rhythm).
+   * Returns the performance.now() value that corresponds to timeMs = 0.
    */
   start(ticks: ScheduledTick[], handlers: PlaybackHandlers = {}): number {
     this.stop()
@@ -89,7 +90,7 @@ export class AudioEngine {
       ) {
         const tick = sorted[scheduledIndex]
         if (!tick.silent && tick.kind !== 'end') {
-          this.click(audioStart + tick.timeMs / 1000, Boolean(tick.accent), tick.kind)
+          this.click(audioStart + tick.timeMs / 1000)
         }
         scheduledIndex += 1
       }
@@ -130,38 +131,13 @@ export class AudioEngine {
   }
 }
 
-/** Builds the tick schedule for an exercise run: count-in clicks then quiet beat clicks. */
-export function buildExerciseTicks(
-  countInBeats: number,
-  beatMs: number,
-  totalDurationMs: number,
-): ScheduledTick[] {
-  const ticks: ScheduledTick[] = []
-  for (let i = 0; i < countInBeats; i++) {
-    ticks.push({ timeMs: i * beatMs, kind: 'count', index: i, accent: i === 0 })
-  }
-  const totalBeats = Math.round(totalDurationMs / beatMs)
-  for (let beat = countInBeats; beat < totalBeats; beat++) {
-    ticks.push({ timeMs: beat * beatMs, kind: 'beat', index: beat - countInBeats })
-  }
-  ticks.push({ timeMs: totalDurationMs + beatMs * 0.75, kind: 'end', index: 0, silent: true })
-  return ticks
-}
-
-/** Builds the tick schedule for "I give up" playback: count-in then the rhythm itself. */
-export function buildPlaybackTicks(
-  countInBeats: number,
-  beatMs: number,
-  onsetsMs: number[],
-  totalDurationMs: number,
-): ScheduledTick[] {
-  const ticks: ScheduledTick[] = []
-  for (let i = 0; i < countInBeats; i++) {
-    ticks.push({ timeMs: i * beatMs, kind: 'count', index: i, accent: i === 0 })
-  }
-  onsetsMs.forEach((timeMs, index) => {
-    ticks.push({ timeMs, kind: 'note', index, accent: true })
-  })
-  ticks.push({ timeMs: totalDurationMs + beatMs * 0.5, kind: 'end', index: 0, silent: true })
+/** Builds the tick schedule for "I give up" playback: one tick per onset, then a silent end marker. */
+export function buildPlaybackTicks(onsetsMs: number[], totalDurationMs: number): ScheduledTick[] {
+  const ticks: ScheduledTick[] = onsetsMs.map((timeMs, index) => ({
+    timeMs,
+    kind: 'note' as const,
+    index,
+  }))
+  ticks.push({ timeMs: totalDurationMs + 400, kind: 'end', index: 0, silent: true })
   return ticks
 }

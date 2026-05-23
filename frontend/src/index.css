@@ -485,29 +485,6 @@ textarea {
   font-size: 1.05rem;
 }
 
-.count-beats {
-  display: inline-flex;
-  gap: 0.4rem;
-  margin-left: 0.5rem;
-}
-
-.count-beat {
-  display: inline-flex;
-  width: 2rem;
-  height: 2rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  font-weight: 600;
-}
-
-.count-beat.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
 .recording-dot {
   display: inline-block;
   width: 10px;
@@ -546,6 +523,14 @@ textarea {
   gap: 0.75rem;
   flex-wrap: wrap;
   margin-top: 1rem;
+}
+
+.played-rhythm {
+  border-left: 4px solid var(--amber);
+}
+
+.played-rhythm h3 {
+  margin-top: 0;
 }
 
 /* ---------- Learn page ---------- */

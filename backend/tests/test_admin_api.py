@@ -7,7 +7,7 @@ from .conftest import auth_headers, register_and_login
 def test_admin_user_list_includes_progress_summary(client, admin_token, exercises, db_session):
     token, user_data = register_and_login(client, "student1", "password1")
     exercise = exercises[0]
-    taps = rhythm.expected_onsets(exercise.pattern, exercise.time_signature, exercise.tempo_bpm)
+    taps = [1000.0 + p * 700 for p in rhythm.onset_beats(exercise.pattern)]
     client.post(
         "/api/attempts",
         json={"exercise_id": exercise.id, "taps_ms": taps, "gave_up": False},

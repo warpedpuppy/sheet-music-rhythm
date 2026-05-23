@@ -2,8 +2,9 @@ from app.services import rhythm
 from .conftest import auth_headers
 
 
-def perfect_taps(exercise):
-    return rhythm.expected_onsets(exercise.pattern, exercise.time_signature, exercise.tempo_bpm)
+def perfect_taps(exercise, beat_ms=650.0):
+    """Taps with the correct relative rhythm at an arbitrary tempo (the user's own pace)."""
+    return [1000.0 + position * beat_ms for position in rhythm.onset_beats(exercise.pattern)]
 
 
 def test_submit_perfect_attempt(client, user_token, exercises):
@@ -21,7 +22,8 @@ def test_submit_perfect_attempt(client, user_token, exercises):
     assert len(data["results"]) == len(taps)
     assert all(r["status"] == "hit" for r in data["results"])
     assert data["progression"]["unlocked_level"] == 1
-    assert data["tolerance_ms"] > 0
+    assert data["detected_tempo_bpm"] == round(60000 / 650)
+    assert len(data["played_pattern"]["events"]) == len(taps)
 
 
 def test_submit_failed_attempt_returns_per_note_results(client, user_token, exercises):
@@ -35,6 +37,7 @@ def test_submit_failed_attempt_returns_per_note_results(client, user_token, exer
     assert data["passed"] is False
     assert data["accuracy"] == 0.0
     assert all(r["status"] == "missed" for r in data["results"])
+    assert data["played_pattern"] is None
 
 
 def test_level_up_after_passing_two_exercises(client, user_token, exercises):

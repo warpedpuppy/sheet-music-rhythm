@@ -142,9 +142,11 @@ export function Learn() {
             silent while you count 2.
           </p>
           <p>
-            Before every exercise you will hear a one-measure <strong>count-in</strong>: clicks on
-            each beat so you can feel the speed before you start tapping. Keep counting through the
-            whole exercise — the count is what keeps long notes and rests honest.
+            In the exercises here you set your own speed: your first tap starts the clock, and what
+            is judged is whether the <em>relationships</em> between your taps match the notation.
+            Counting steadily in your head — “1, 2, 3, 4” — is what keeps long notes and rests
+            honest. If you want to hear a rhythm against a steady pulse, press “I give up” and the
+            app will tick it for you.
           </p>
           <NotationExample
             pattern={p(n('q'), n('q'), n('h'), n('h'), n('q'), n('q'))}
@@ -158,13 +160,14 @@ export function Learn() {
             <strong>Tempo</strong> is the speed of the beat, measured in <strong>beats per minute
             (BPM)</strong>. At 60 BPM each beat lasts exactly one second; at 120 BPM the beats come
             twice as fast. A <strong>metronome</strong> is the steady clicking device (or app) that
-            sounds every beat — the count-in clicks in the exercises are a metronome.
+            sounds every beat — practicing with one is the best way to keep your pulse honest.
           </p>
           <p>
             The notation itself never changes with tempo: a quarter note is always one beat. What
-            changes is how much clock time a beat takes. The exercises here use moderate tempos
-            (70–100 BPM), and the scoring window scales with the tempo, so faster exercises are not
-            unfairly strict.
+            changes is how much clock time a beat takes. In the exercises here you choose your own
+            tempo when you tap — the app detects it from your taps and judges the rhythm at that
+            speed, so tapping slower is never penalized. The “I give up” playback uses each
+            exercise&apos;s written tempo.
           </p>
         </section>
 

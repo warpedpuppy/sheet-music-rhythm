@@ -26,17 +26,14 @@ export function beatMs(tempoBpm: number): number {
   return 60000 / tempoBpm
 }
 
-export function countInMs(timeSignature: string, tempoBpm: number): number {
-  return beatsPerMeasure(timeSignature) * beatMs(tempoBpm)
-}
-
 /**
- * Onset times in ms, relative to the first count-in click, for every event the
- * user must tap. Rests and tied-into notes consume time but produce no onset.
+ * Onset times in ms from the start of the pattern for every event the user
+ * must tap. Rests and tied-into notes consume time but produce no onset.
+ * Used to schedule the "I give up" rhythm playback.
  */
-export function expectedOnsets(pattern: Pattern, timeSignature: string, tempoBpm: number): number[] {
+export function expectedOnsets(pattern: Pattern, tempoBpm: number): number[] {
   const bms = beatMs(tempoBpm)
-  let t = countInMs(timeSignature, tempoBpm)
+  let t = 0
   const onsets: number[] = []
   let tiedInto = false
   for (const event of pattern.events) {
@@ -47,6 +44,11 @@ export function expectedOnsets(pattern: Pattern, timeSignature: string, tempoBpm
     tiedInto = Boolean(event.tieToNext) && event.type === 'note'
   }
   return onsets
+}
+
+/** How many spacebar taps the exercise expects (one per onset). */
+export function onsetCount(pattern: Pattern): number {
+  return onsetEventIndices(pattern).length
 }
 
 /**
@@ -65,11 +67,10 @@ export function onsetEventIndices(pattern: Pattern): number[] {
   return indices
 }
 
-/** Length of count-in plus the full pattern, in ms. */
-export function totalDurationMs(pattern: Pattern, timeSignature: string, tempoBpm: number): number {
+/** Length of the full pattern in ms at the given tempo. */
+export function patternDurationMs(pattern: Pattern, tempoBpm: number): number {
   const bms = beatMs(tempoBpm)
-  const patternBeats = pattern.events.reduce((sum, event) => sum + eventBeats(event), 0)
-  return countInMs(timeSignature, tempoBpm) + patternBeats * bms
+  return pattern.events.reduce((sum, event) => sum + eventBeats(event), 0) * bms
 }
 
 /** Splits the events into measures based on the time signature (greedy by beats). */

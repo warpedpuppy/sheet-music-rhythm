@@ -1,12 +1,14 @@
 # Sheet Music Rhythm Trainer
 
 A web app that teaches students to read rhythm in sheet music. Each exercise shows real notation
-(rendered with VexFlow), plays a metronome count-in, and then listens to the student tapping the
-**spacebar** in time with the printed rhythm. Taps are scored note-by-note, difficulty increases as
-exercises are passed, and the trainer suggests similar/easier exercises when a student is stuck.
-An "I give up" button ticks the correct rhythm out loud while a dot moves over each note as it
-sounds. A comprehensive Learn section explains every rhythm concept with diagrams, and each
-exercise links to the relevant section.
+(rendered with VexFlow) and the student taps the printed rhythm on the **spacebar** at their own
+speed — every tap ticks back, and the attempt ends once they have tapped every note on the page.
+Taps are scored note-by-note against the notated rhythm (the app infers the student's tempo),
+difficulty increases as exercises are passed, and the trainer suggests similar/easier exercises
+when a student is stuck. An "I give up" button ticks the correct rhythm out loud while a dot moves
+over each note as it sounds, and after a mistake students can see the rhythm they actually played
+written out as notation. A comprehensive Learn section explains every rhythm concept with diagrams,
+and each exercise links to the relevant section.
 
 ## Stack
 
@@ -63,17 +65,21 @@ Open http://localhost:5173, create an account (or log in as `demo`), and start t
 
 1. The rhythm is rendered on a percussion staff. A link below the title points to the Learn section
    that explains the concept being practiced.
-2. Press **Start**: you hear a one-measure count-in, then quiet beat clicks while you tap the
-   **spacebar** in time with the notation. Tap only where notes begin — never during rests or on
-   tied notes.
-3. Your taps are sent to the backend, which matches each tap to the expected note onsets within a
-   tempo-scaled tolerance window. Each note is marked on time / early / late / missed (colored dots
-   over the notation), and the attempt passes at 80% accuracy.
-4. Passing exercises unlocks higher levels. Failing the same exercise three times starts a
+2. Press **Start**, then tap the **spacebar** in the rhythm of the notes shown. There is no
+   metronome and no count-in: you set the speed, each tap plays a tick, and the attempt ends as
+   soon as you have tapped as many notes as are on the page. Tap only where notes begin — never
+   during rests or on tied notes.
+3. Your taps are sent to the backend, which anchors on your first tap, infers your tempo from the
+   taps, and checks whether the relative durations match the notation. Each note is marked on
+   time / early / late / missed (colored dots over the notation), and the attempt passes at 80%
+   accuracy.
+4. If you made a mistake, **Show what you actually played** writes your taps out as notation below
+   the exercise so you can compare it with what was printed.
+5. Passing exercises unlocks higher levels. Failing the same exercise three times starts a
    remediation detour: the trainer suggests similar exercises at the same or lower difficulty until
    you pass two of them, then steers you back.
-5. **I give up** plays the correct rhythm as a ticking sound while a dot moves over each note as it
-   sounds, then records the attempt (not as a pass).
+6. **I give up** plays the correct rhythm as a ticking sound (at the exercise's written tempo)
+   while a dot moves over each note as it sounds, then records the attempt (not as a pass).
 
 ## Admin
 

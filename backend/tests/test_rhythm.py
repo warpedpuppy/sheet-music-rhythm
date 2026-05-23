@@ -54,38 +54,37 @@ def test_validate_pattern_rejects_tie_into_rest():
         rhythm.validate_pattern(pattern, "4/4", 1)
 
 
-def test_expected_onsets_simple_quarters():
-    # 60 BPM -> 1000 ms per beat; count-in of one 4/4 measure = 4000 ms.
+def test_onset_beats_simple_quarters():
     pattern = make_pattern(*[note("q")] * 4)
-    onsets = rhythm.expected_onsets(pattern, "4/4", 60)
-    assert onsets == [4000.0, 5000.0, 6000.0, 7000.0]
+    assert rhythm.onset_beats(pattern) == [0.0, 1.0, 2.0, 3.0]
 
 
-def test_expected_onsets_skips_rests():
+def test_onset_beats_skips_rests():
     pattern = make_pattern(note("q"), rest("q"), note("h"))
-    onsets = rhythm.expected_onsets(pattern, "4/4", 60)
-    assert onsets == [4000.0, 6000.0]
+    assert rhythm.onset_beats(pattern) == [0.0, 2.0]
 
 
-def test_expected_onsets_dotted_note():
+def test_onset_beats_leading_rest_offsets_first_onset():
+    pattern = make_pattern(rest("8"), note("8"), note("q"), note("h"))
+    assert rhythm.onset_beats(pattern) == [0.5, 1.0, 2.0]
+
+
+def test_onset_beats_dotted_note():
     pattern = make_pattern(note("q", dots=1), note("8"), note("h"))
-    onsets = rhythm.expected_onsets(pattern, "4/4", 60)
-    assert onsets == [4000.0, 5500.0, 6000.0]
+    assert rhythm.onset_beats(pattern) == [0.0, 1.5, 2.0]
 
 
-def test_expected_onsets_tied_note_produces_no_onset():
+def test_onset_beats_tied_note_produces_no_onset():
     pattern = make_pattern(note("q"), note("q", tie=True), note("q"), note("q"))
-    onsets = rhythm.expected_onsets(pattern, "4/4", 60)
     # Second quarter ties into the third: only 3 onsets, third note absorbed.
-    assert onsets == [4000.0, 5000.0, 7000.0]
+    assert rhythm.onset_beats(pattern) == [0.0, 1.0, 3.0]
 
 
-def test_expected_onsets_count_in_respects_time_signature():
-    pattern = make_pattern(*[note("q")] * 3)
-    onsets = rhythm.expected_onsets(pattern, "3/4", 60)
-    assert onsets == [3000.0, 4000.0, 5000.0]
+def test_onset_durations_include_tied_notes():
+    pattern = make_pattern(note("q"), note("q", tie=True), note("q"), note("q"))
+    assert rhythm.onset_durations_beats(pattern) == [1.0, 2.0, 1.0]
 
 
-def test_total_duration_ms():
-    pattern = make_pattern(*[note("q")] * 4)
-    assert rhythm.total_duration_ms(pattern, "4/4", 60) == 8000.0
+def test_beat_ms():
+    assert rhythm.beat_ms(60) == 1000.0
+    assert rhythm.beat_ms(120) == 500.0

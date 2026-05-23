@@ -1,89 +1,114 @@
-from app.services import rhythm, scoring
+from app.services import scoring
 from .conftest import make_pattern, note, rest
 
-# 60 BPM -> beat = 1000 ms, count-in = 4000 ms, tolerance = 250 ms, hit window = 100 ms.
-PATTERN = make_pattern(*[note("q")] * 4)
-TS = "4/4"
-BPM = 60
-ONSETS = [4000.0, 5000.0, 6000.0, 7000.0]
+# Four quarter notes: relative beat positions 0, 1, 2, 3.
+QUARTERS = make_pattern(*[note("q")] * 4)
+# Dotted quarter + eighth + half: positions 0, 1.5, 2.
+DOTTED = make_pattern(note("q", dots=1), note("8"), note("h"))
 
 
-def test_perfect_taps_score_full():
-    result = scoring.score_attempt(PATTERN, TS, BPM, list(ONSETS))
+def taps_at(beat_ms, positions, start=10000.0):
+    return [start + p * beat_ms for p in positions]
+
+
+def test_correct_ratios_pass_at_a_slow_tempo():
+    result = scoring.score_attempt(QUARTERS, taps_at(900, [0, 1, 2, 3]))
     assert [r.status for r in result.results] == ["hit"] * 4
     assert result.accuracy == 1.0
     assert result.passed is True
-    assert result.extra_taps == []
+    assert result.detected_tempo_bpm == round(60000 / 900)
 
 
-def test_slightly_off_taps_still_hit():
-    taps = [o + 80 for o in ONSETS]
-    result = scoring.score_attempt(PATTERN, TS, BPM, taps)
-    assert all(r.status == "hit" for r in result.results)
+def test_correct_ratios_pass_at_a_fast_tempo():
+    result = scoring.score_attempt(QUARTERS, taps_at(400, [0, 1, 2, 3]))
     assert result.accuracy == 1.0
+    assert result.passed is True
+    assert result.detected_tempo_bpm == 150
 
 
-def test_early_and_late_taps_get_partial_credit():
-    taps = [4000.0 - 200, 5000.0 + 200, 6000.0, 7000.0]
-    result = scoring.score_attempt(PATTERN, TS, BPM, taps)
-    statuses = [r.status for r in result.results]
-    assert statuses == ["early", "late", "hit", "hit"]
-    assert result.accuracy == (0.5 + 0.5 + 1 + 1) / 4
+def test_dotted_rhythm_with_correct_ratios_passes():
+    result = scoring.score_attempt(DOTTED, taps_at(800, [0, 1.5, 2]))
+    assert [r.status for r in result.results] == ["hit"] * 3
+    assert result.passed is True
 
 
-def test_missing_tap_marks_note_missed():
-    taps = [4000.0, 5000.0, 6000.0]
-    result = scoring.score_attempt(PATTERN, TS, BPM, taps)
-    assert result.results[3].status == "missed"
-    assert result.accuracy == 0.75
+def test_even_taps_for_a_dotted_rhythm_fail():
+    # User taps three evenly spaced notes for a dotted-quarter / eighth / half figure.
+    result = scoring.score_attempt(DOTTED, taps_at(800, [0, 1, 2]))
+    assert result.results[0].status == "hit"
+    assert result.results[1].status != "hit"
     assert result.passed is False
 
 
-def test_tap_far_outside_window_is_extra_and_note_missed():
-    taps = [4000.0, 5000.0, 6000.0, 7600.0]
-    result = scoring.score_attempt(PATTERN, TS, BPM, taps)
-    assert result.results[3].status == "missed"
-    assert result.extra_taps == [7600.0]
-    # 3 hits - 0.25 extra penalty = 2.75 / 4
-    assert result.accuracy == 0.6875
+def test_slightly_uneven_taps_get_partial_credit():
+    result = scoring.score_attempt(QUARTERS, taps_at(800, [0, 1.18, 2, 3]))
+    statuses = [r.status for r in result.results]
+    assert statuses[0] == "hit"
+    assert statuses[1] in ("late", "early")
+    assert 0 < result.accuracy < 1
 
 
-def test_double_tap_matches_once_and_penalizes_extra():
-    taps = [4000.0, 4040.0, 5000.0, 6000.0, 7000.0]
-    result = scoring.score_attempt(PATTERN, TS, BPM, taps)
-    assert [r.status for r in result.results] == ["hit"] * 4
-    assert len(result.extra_taps) == 1
-    assert result.accuracy == (4 - 0.25) / 4
+def test_missing_taps_are_marked_missed():
+    result = scoring.score_attempt(QUARTERS, taps_at(800, [0, 1]))
+    assert [r.status for r in result.results] == ["hit", "hit", "missed", "missed"]
+    assert result.accuracy == 0.5
+    assert result.passed is False
 
 
 def test_no_taps_scores_zero():
-    result = scoring.score_attempt(PATTERN, TS, BPM, [])
+    result = scoring.score_attempt(QUARTERS, [])
     assert all(r.status == "missed" for r in result.results)
     assert result.accuracy == 0.0
-    assert result.passed is False
+    assert result.played_pattern is None
+    assert result.detected_tempo_bpm is None
 
 
-def test_rests_do_not_expect_taps():
-    pattern = make_pattern(note("q"), rest("q"), note("q"), rest("q"))
-    onsets = rhythm.expected_onsets(pattern, TS, BPM)
-    result = scoring.score_attempt(pattern, TS, BPM, list(onsets))
-    assert len(result.results) == 2
+def test_rests_lengthen_the_gap_but_are_not_tapped():
+    pattern = make_pattern(note("q"), rest("q"), note("q"), note("q"))
+    # Onsets at beats 0, 2, 3 -> taps with a double gap in the middle.
+    result = scoring.score_attempt(pattern, taps_at(700, [0, 2, 3]))
+    assert len(result.results) == 3
     assert result.accuracy == 1.0
 
 
-def test_pass_threshold_boundary():
-    # Three hits and one late: (3 + 0.5) / 4 = 0.875 -> pass.
-    taps = [4000.0, 5000.0, 6000.0, 7200.0]
-    result = scoring.score_attempt(PATTERN, TS, BPM, taps)
-    assert result.accuracy == 0.875
+def test_leading_rest_is_ignored_for_anchoring():
+    pattern = make_pattern(rest("8"), note("8"), note("q"), note("q"), note("q"), note("8"))
+    # Onsets land at beats 0.5, 1, 2, 3, 4; anchored to the first onset that is 0, 0.5, 1.5, 2.5, 3.5.
+    result = scoring.score_attempt(pattern, taps_at(600, [0, 0.5, 1.5, 2.5, 3.5]))
+    assert all(r.status == "hit" for r in result.results)
     assert result.passed is True
-    # Two hits, two missed = 0.5 -> fail.
-    result = scoring.score_attempt(PATTERN, TS, BPM, [4000.0, 5000.0])
+
+
+def test_single_note_pattern_any_tap_is_a_hit():
+    pattern = make_pattern(note("w"))
+    result = scoring.score_attempt(pattern, [123456.0])
+    assert result.results[0].status == "hit"
+    assert result.accuracy == 1.0
+    assert result.detected_tempo_bpm is None
+
+
+def test_spammed_taps_do_not_pass():
+    result = scoring.score_attempt(QUARTERS, [1000.0, 1030.0, 1060.0, 1090.0])
     assert result.passed is False
 
 
-def test_tolerance_floor_for_fast_tempos():
-    # 240 BPM -> beat 250 ms -> 25% = 62.5 ms (above the 60 ms floor).
-    assert scoring.tolerance_for(rhythm.beat_ms(240)) == 62.5
-    # Extremely fast hypothetical beat where the floor kicks in.
-    assert scoring.tolerance_for(100.0) == 60.0
+def test_played_pattern_quantizes_taps():
+    # Quarter, quarter, half feel at 500 ms per beat.
+    pattern = make_pattern(note("q"), note("q"), note("h"))
+    result = scoring.score_attempt(pattern, taps_at(500, [0, 1, 2]))
+    events = result.played_pattern["events"]
+    assert [e["duration"] for e in events] == ["q", "q", "h"]
+    assert all(e["type"] == "note" for e in events)
+
+
+def test_played_pattern_reflects_what_was_actually_tapped():
+    # The notation is four quarters but the user plays quarter, dotted-quarter, eighth, quarter.
+    result = scoring.score_attempt(QUARTERS, taps_at(600, [0, 1, 2.5, 3]))
+    events = result.played_pattern["events"]
+    assert events[1] == {"type": "note", "duration": "q", "dots": 1}
+    assert events[2]["duration"] == "8"
+
+
+def test_fit_beat_is_clamped_to_a_sane_range():
+    assert scoring.fit_beat_ms([0, 1, 2, 3], [0, 50, 100, 150]) == scoring.MIN_BEAT_MS
+    assert scoring.fit_beat_ms([0, 1, 2, 3], [0, 5000, 10000, 15000]) == scoring.MAX_BEAT_MS

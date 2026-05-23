@@ -76,8 +76,6 @@ class ExerciseOut(BaseModel):
     pattern: Pattern
     concept_tags: list[str]
     learn_section_slug: str | None
-    count_in_beats: int = 4
-    tolerance_ms: float = 0.0
     user_status: UserExerciseStatus | None = None
 
 
@@ -109,10 +107,10 @@ class AttemptOut(BaseModel):
     attempt_id: int
     gave_up: bool = False
     results: list[NoteResult] = []
-    extra_taps: list[float] = []
     accuracy: float | None = None
     passed: bool = False
-    tolerance_ms: float = 0.0
+    detected_tempo_bpm: int | None = None
+    played_pattern: Pattern | None = None
     progression: ProgressionInfo
 
 
